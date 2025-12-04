@@ -111,33 +111,24 @@ class AudioPlayerManager {
                 }
             }
         }
-    
-        
     }
     
     private func configureAudioChain() {
         // Add player to engine
         audioEngine.attach(playerNode)
-        
-        //audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: nil)
-        
-//        do {
-//            try audioEngine.start()
-//            print("Engine started")
-//        } catch {
-//            print("Error starting audio engine: \(error)")
-//        }
     }
     
     private func configureAudioSession() {
-        let session = AVAudioSession.sharedInstance()
-        
-        do {
-            try session.setCategory(.playback, mode: .default, options: [.defaultToSpeaker])
-            try session.setPreferredIOBufferDuration(0.015) // buffer send speed
-            try session.setActive(true)
-        } catch {
-            print("Failed to set up audio session: \(error)")
+        Task.detached(priority: .userInitiated) {
+            let session = AVAudioSession.sharedInstance()
+            
+            do {
+                try session.setCategory(.playback, mode: .default)
+                try session.setPreferredIOBufferDuration(0.015) // buffer send speed
+                try session.setActive(true)
+            } catch {
+                print("Failed to set up audio session: \(error)")
+            }
         }
     }
 }

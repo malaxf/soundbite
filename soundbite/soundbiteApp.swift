@@ -15,6 +15,6 @@ struct soundbiteApp: App {
             ContentView()
                 .preferredColorScheme(.dark)
         }
-        .modelContainer(for: AudioRecording.self)
+        .modelContainer(for: [AudioRecording.self, Project.self])
     }
 }

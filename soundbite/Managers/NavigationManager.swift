@@ -13,8 +13,8 @@ import Observation
 class NavigationManager {
     var path: NavigationPath = NavigationPath()
     
-    func navigateToEditor(for recording: AudioRecording) {
-        path.append(recording)
+    func navigateToEditor(for project: Project) {
+        path.append(project)
     }
     
     func popToRoot() {

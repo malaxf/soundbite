@@ -22,6 +22,7 @@ final class AudioFileService {
     
 
     func moveAudio(from tempURL: URL) async throws -> String {
+        print("TEMP: move audio called")
         let filename = UUID().uuidString + ".m4a"
         let destinationURL = URL.documentsDirectory.appending(path: filename)
         
@@ -30,12 +31,19 @@ final class AudioFileService {
         }
         
         try FileManager.default.moveItem(at: tempURL, to: destinationURL)
-        
+        print("moveAudio basically done")
         return filename
     }
     
     func deleteAudio(filename: String) async {
         let url = URL.documentsDirectory.appending(path: filename)
         try? FileManager.default.removeItem(at: url)
+    }
+    
+    func cloneAudio(from sourceURL: URL, to filename: String) throws {
+        let destURL = URL.documentsDirectory.appending(path: filename)
+        
+        // Should not use extra disk space unless one of source or dest files are modified
+        try FileManager.default.copyItem(at: sourceURL, to: destURL)
     }
 }
