@@ -14,7 +14,7 @@ struct ProjectCanvasScreen: View {
     @State private var showChangeBackgroundSheet = false
     
     @State private var progress = 0.5
-    
+    @State private var primaryColor = Color.green
     private let start = Date.now
     
     var body: some View {
@@ -47,6 +47,9 @@ struct ProjectCanvasScreen: View {
                 Button("", systemImage: "paintbrush", role: .none) {
                     showChangeBackgroundSheet = true
                 }
+            }
+            ToolbarItem(placement: .bottomBar) {
+                ColorPicker("Primary", selection: $primaryColor)
             }
             ToolbarItem(placement: .bottomBar) {
                 VStack(spacing: 8) {

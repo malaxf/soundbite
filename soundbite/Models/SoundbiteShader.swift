@@ -28,6 +28,19 @@ nonisolated enum ProjectBackground: Codable, Sendable, Equatable {
             return false
         }
     }
+    
+    var primaryShaderColor: ShaderColor? {
+        if case .shader(_, let primary, _) = self {
+            return primary
+        }
+        return nil
+    }
+    
+    var secondaryShaderColor: ShaderColor? {
+        if case .shader(_, _, let secondary) = self {
+            return secondary        }
+        return nil
+    }
 }
 
 
@@ -56,6 +69,10 @@ nonisolated struct ShaderColor: Codable, Sendable, Equatable {
         Color(red: r, green: g, blue: b)
     }
     
+    var cgColor: CGColor {
+        CGColor(red: r, green: g, blue: b, alpha: 1)
+    }
+    
     var shaderComponents: [Float] {
         [Float(r), Float(g), Float(b), 1.0]
     }
@@ -69,11 +86,16 @@ nonisolated struct ShaderColor: Codable, Sendable, Equatable {
         self.b = b
     }
     
-    init(color: UIColor) {
+    init(color: CGColor) {
         var r: CGFloat = 0
         var g: CGFloat = 0
         var b: CGFloat = 0
-        color.getRed(&r, green: &g, blue: &b, alpha: nil)
+        
+        let components = color.components
+        
+        r = components?[0] ?? 0
+        g = components?[1] ?? 0
+        b = components?[2] ?? 0
         
         self.r = r
         self.g = g
