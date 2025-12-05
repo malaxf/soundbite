@@ -15,15 +15,15 @@ struct EditProjectBackgroundView: View {
     }
     
     let primaryColors: [CGColor] = [
-        CGColor(red: 0, green: 0, blue: 1, alpha: 1),         // Blue (pairs with pink)
-        CGColor(red: 0.8, green: 0, blue: 0, alpha: 1),       // Red (pairs with blue)
-        CGColor(red: 0.8, green: 0, blue: 0, alpha: 1),       // Red (pairs with bright red)
-        CGColor(red: 0.9, green: 0.7, blue: 0, alpha: 1),     // Gold (pairs with light yellow)
-        CGColor(red: 0, green: 0.6, blue: 0.7, alpha: 1),     // Cyan (pairs with light cyan)
-        CGColor(red: 0, green: 0, blue: 0, alpha: 1),         // Black (pairs with white)
-        CGColor(red: 0, green: 0.6, blue: 0, alpha: 1),       // Green (pairs with lime)
-        CGColor(red: 0.5, green: 0.4, blue: 0, alpha: 1),     // Olive (pairs with yellow)
-        CGColor(red: 0.8, green: 0, blue: 0.2, alpha: 1),     // Deep pink (pairs with light pink)
+        CGColor(red: 0, green: 0, blue: 1, alpha: 1),
+        CGColor(red: 0.8, green: 0, blue: 0, alpha: 1),
+        CGColor(red: 0.5, green: 0, blue: 0, alpha: 1),
+        CGColor(red: 0.1, green: 0.1, blue: 0, alpha: 1),
+        CGColor(red: 0, green: 0.6, blue: 0.7, alpha: 1),
+        CGColor(red: 0, green: 0, blue: 0, alpha: 1),
+        CGColor(red: 0, green: 0.6, blue: 0, alpha: 1),
+        CGColor(red: 0.2, green: 0.2, blue: 1, alpha: 1),
+        CGColor(red: 0.8, green: 0, blue: 0.2, alpha: 1),
     ]
     
     let secondaryColors: [CGColor] = [
@@ -36,6 +36,7 @@ struct EditProjectBackgroundView: View {
         CGColor(red: 0.6, green: 1, blue: 0.3, alpha: 1),
         CGColor(red: 0.9, green: 0.7, blue: 0.1, alpha: 1),
         CGColor(red: 1, green: 0.5, blue: 0.5, alpha: 1),
+        CGColor(red: 0, green: 0, blue: 1, alpha: 1),
     ]
     
 
@@ -54,7 +55,7 @@ struct EditProjectBackgroundView: View {
                             .font(.headline)
                             .padding(.horizontal, 16)
                         ScrollView(.horizontal) {
-                            HStack {
+                            HStack(spacing: 8) {
                                 ForEach(primaryColors, id: \.self) { cgColor in
                                     primaryColorButton(color: cgColor)
                                 }
@@ -70,7 +71,7 @@ struct EditProjectBackgroundView: View {
                             .font(.headline)
                             .padding(.horizontal, 16)
                         ScrollView(.horizontal) {
-                            HStack {
+                            HStack(spacing: 8) {
                                 ForEach(secondaryColors, id: \.self) { cgColor in
                                     secondaryColorButton(color: cgColor)
                                 }
@@ -125,7 +126,7 @@ struct EditProjectBackgroundView: View {
                 .fill(Color(cgColor: color))
                 .overlay {
                     Circle()
-                        .strokeBorder(style: StrokeStyle(lineWidth: 5))
+                        .strokeBorder(style: StrokeStyle(lineWidth: 4))
                         .foregroundStyle(
                             project.background.primaryShaderColor == ShaderColor(color: color) ?
                             Color.white.opacity(0.5) : Color.clear
@@ -151,7 +152,7 @@ struct EditProjectBackgroundView: View {
                 .fill(Color(cgColor: color))
                 .overlay {
                     Circle()
-                        .strokeBorder(style: StrokeStyle(lineWidth: 5))
+                        .strokeBorder(style: StrokeStyle(lineWidth: 4))
                         .foregroundStyle(
                             project.background.secondaryShaderColor == ShaderColor(color: color) ?
                             Color.black.opacity(0.3) : Color.clear
