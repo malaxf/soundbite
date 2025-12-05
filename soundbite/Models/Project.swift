@@ -9,13 +9,6 @@ import Foundation
 import SwiftData
 import SwiftUI
 
-
-nonisolated enum ProjectBackground: Codable, Sendable, Equatable {
-    case shader(SoundbiteShader)
-    case image(filename: String)
-    case color(red: Double, green: Double, blue: Double)
-}
-
 @Model
 final class Project {
     var id: UUID
@@ -24,7 +17,11 @@ final class Project {
     
     init(
         songFilename: String,
-        background: ProjectBackground = .shader(.horizontalLinesInVoidReactive)
+        background: ProjectBackground = .shader(
+            type: .horizontalLinesInVoidReactive,
+            primary: ShaderColor.blue,
+            secondary: ShaderColor.pink
+        )
     ) {
         self.id = UUID()
         self.songFilename = songFilename
