@@ -14,6 +14,15 @@ struct EditProjectBackgroundView: View {
         SoundbiteShader.allCases.filter({ $0.isReactive })
     }
     
+    let colors = [
+        UIColor(red: 0, green: 0, blue: 1, alpha: 1),
+        UIColor(red: 1, green: 0, blue: 0, alpha: 1),
+        UIColor(red: 0, green: 1, blue: 0, alpha: 1),
+        UIColor(red: 1, green: 0.6, blue: 1, alpha: 1),
+        UIColor(red: 0.6, green: 1, blue: 1, alpha: 1),
+        UIColor(red: 1, green: 1, blue: 0.6, alpha: 1)
+    ]
+    
     var body: some View {
         VStack(spacing: 20) {
             HStack {
@@ -22,13 +31,23 @@ struct EditProjectBackgroundView: View {
                 }
             }
             
-            HStack {
-                
+            ScrollView(.horizontal) {
+                HStack {
+                    ForEach(colors, id: \.self) { color in
+                        changePrimaryColorButton(color: color)
+                    }
+                }
             }
+            .frame(height: 40)
             
-            HStack {
-                
+            ScrollView(.horizontal) {
+                HStack {
+                    ForEach(colors, id: \.self) { color in
+                        changeSecondaryColorButton(color: color)
+                    }
+                }
             }
+            .frame(height: 40)
         }
     }
     
@@ -53,18 +72,33 @@ struct EditProjectBackgroundView: View {
         }
     }
     
-    func changePrimaryColorButton(color: Color) {
+    func changePrimaryColorButton(color: UIColor) -> some View {
         Button {
-            switch project.background {
-            case .shader(let type, let primary, let secondary):
-                // nothing
-            case .image(let filename):
-                // nothing
-            case .color(let red, let green, let blue):
-                // nothing
+            if case .shader(let type, _, let secondary) = project.background {
+                project.background = .shader(
+                    type: type,
+                    primary: ShaderColor(color: color),
+                    secondary: secondary
+                )
             }
         } label: {
-            
+            Circle()
+                .fill(Color(uiColor: color))
+        }
+    }
+    
+    func changeSecondaryColorButton(color: UIColor) -> some View {
+        Button {
+            if case .shader(let type, let primary, _) = project.background {
+                project.background = .shader(
+                    type: type,
+                    primary: primary,
+                    secondary: ShaderColor(color: color)
+                )
+            }
+        } label: {
+            Circle()
+                .fill(Color(uiColor: color))
         }
     }
 }
