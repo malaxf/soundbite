@@ -10,9 +10,22 @@
 		37071A2C2EC6F487005C4E80 /* soundbite.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = soundbite.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		376179672EEC619900AEA57C /* Exceptions for "soundbite" folder in "Compile Sources" phase from "soundbite" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = 37071A282EC6F487005C4E80 /* Sources */;
+			membershipExceptions = (
+				Shaders/ShaderHelpers.h,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		37071A2E2EC6F487005C4E80 /* soundbite */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				376179672EEC619900AEA57C /* Exceptions for "soundbite" folder in "Compile Sources" phase from "soundbite" target */,
+			);
 			path = soundbite;
 			sourceTree = "<group>";
 		};

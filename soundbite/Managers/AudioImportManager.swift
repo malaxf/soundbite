@@ -1,5 +1,5 @@
 //
-//  AudioExtractionManager.swift
+//  AudioImportManager.swift
 //  soundbite
 //
 //  Created by Malachi Frazier on 11/14/25.
@@ -26,7 +26,7 @@ struct MovieFile: Transferable {
 }
 
 @MainActor @Observable
-class AudioExtractionManager {
+class AudioImportManager {
     var isExtracting = false
     var errorMessage: String?
     

@@ -179,6 +179,25 @@ class FFTAudioProcessor {
         self.bins = newBins
     }
     
+    static func convertBufferToMono(_ buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let channelData = buffer.floatChannelData else { return [] }
+        let frameLength = Int(buffer.frameLength)
+        
+        // if already mono, just copy
+        if buffer.format.channelCount == 1 {
+            return Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
+        }
+        
+        var monoSamples = [Float](repeating: 0, count: frameLength)
+        if buffer.format.channelCount >= 2 {
+            vDSP_vadd(channelData[0], 1, channelData[1], 1, &monoSamples, 1, vDSP_Length(frameLength))
+            var divisor: Float = 0.5
+            vDSP_vsmul(monoSamples, 1, &divisor, &monoSamples, 1, vDSP_Length(frameLength))
+        }
+        
+        return monoSamples
+    }
+    
     
     @available(*, deprecated, message: "Do not use this if you want FFT outputs from a live stream.")
     internal func m4aToPCM(data: Data) -> [Float] {

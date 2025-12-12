@@ -18,7 +18,7 @@ struct SelectAudioSheetView: View {
     
     @State private var showVideoPicker = false
     @State private var selectedVideoItem: PhotosPickerItem?
-    @State private var extractor = AudioExtractionManager()
+    @State private var audioImporter = AudioImportManager()
     @State private var showError = false
     
     @State private var showDeleteAlert = false
@@ -32,7 +32,7 @@ struct SelectAudioSheetView: View {
                 .font(.title2)
                 .foregroundStyle(Color.foreground)
             
-            if extractor.isExtracting {
+            if audioImporter.isExtracting {
                 ProgressView("Extracting audio...")
                     .foregroundStyle(Color.foreground)
             }
