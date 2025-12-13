@@ -1,5 +1,5 @@
 //
-//  ProjectsManager.swift
+//  ProjectService.swift
 //  soundbite
 //
 //  Created by Malachi Frazier on 11/28/25.
@@ -8,45 +8,54 @@
 import Foundation
 import SwiftData
 
-class ProjectService {
-    let modelContext: ModelContext
-    
-    init(modelContext: ModelContext) {
+@MainActor
+final class ProjectService: ProjectRepository {
+    private let modelContext: ModelContext
+    private let fileService: FileManagementService
+
+    init(modelContext: ModelContext, fileService: FileManagementService) {
         self.modelContext = modelContext
+        self.fileService = fileService
     }
-    
-    func createNewProject(from audio: AudioRecording) -> Project? {
+
+    func createProject(from audio: AudioRecording) throws -> Project {
         let newID = UUID()
         let newFilename = newID.uuidString + ".m4a"
-        
-        guard let sourceURL = audio.fileURL else { return nil }
-        
+
+        guard let sourceURL = audio.fileURL else {
+            throw SoundbiteError.fileNotFound(audio.filename)
+        }
+
         do {
-            try AudioFileService.shared.cloneAudio(from: sourceURL, to: newFilename)
-            
+            try fileService.cloneAudio(from: sourceURL, to: newFilename)
+
             let newProject = Project(songFilename: newFilename)
             newProject.id = newID
-            
+
             modelContext.insert(newProject)
-            
             try modelContext.save()
-            
-            print("[ProjectService]: Project created sucessfully")
-            
+
+            Log.project.info("Project created successfully: \(newID.uuidString)")
             return newProject
-            
+        } catch let error as SoundbiteError {
+            throw error
         } catch {
-            print("ERROR: Could not create project: \(error)")
-            return nil
+            throw SoundbiteError.projectCreationFailed(error.localizedDescription)
         }
     }
-    
-    func deleteProject(_ project: Project) {
-        if let url = project.fileURL {
-            try? FileManager.default.removeItem(at: url)
+
+    func deleteProject(_ project: Project) throws {
+        do {
+            if let url = project.fileURL {
+                try FileManager.default.removeItem(at: url)
+            }
+
+            modelContext.delete(project)
+            try modelContext.save()
+
+            Log.project.info("Project deleted: \(project.id.uuidString)")
+        } catch {
+            throw SoundbiteError.projectDeletionFailed(error.localizedDescription)
         }
-        
-        modelContext.delete(project)
-        try? modelContext.save()
     }
 }

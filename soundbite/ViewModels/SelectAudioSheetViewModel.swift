@@ -11,22 +11,19 @@ import SwiftData
 import _PhotosUI_SwiftUI
 
 @MainActor @Observable
-class SelectAudioSheetViewModel {
+final class SelectAudioSheetViewModel {
     var selectedVideoItem: PhotosPickerItem?
     var showError = false
     var showDeleteAlert = false
     var showRenameAlert = false
     var tempName = ""
     var itemToEdit: AudioRecording?
+    var errorMessage: String?
 
-    private(set) var audioImporter = AudioImportManager()
+    private let audioImporter = AudioImportManager()
 
     var isExtracting: Bool {
         audioImporter.isExtracting
-    }
-
-    var errorMessage: String? {
-        audioImporter.errorMessage
     }
 
     func handleVideoSelection(_ item: PhotosPickerItem?, modelContext: ModelContext) async {
@@ -45,9 +42,9 @@ class SelectAudioSheetViewModel {
             try modelContext.save()
 
             selectedVideoItem = nil
-
         } catch {
-            audioImporter.errorMessage = error.localizedDescription
+            Log.audio.error(error)
+            errorMessage = error.localizedDescription
             showError = true
         }
     }
@@ -75,9 +72,12 @@ class SelectAudioSheetViewModel {
 
     func confirmDelete(modelContext: ModelContext) {
         guard let item = itemToEdit else { return }
-
         modelContext.delete(item)
-        try? modelContext.save()
+        do {
+            try modelContext.save()
+        } catch {
+            Log.project.error(error, context: "Failed to delete recording")
+        }
         clearEditState()
     }
 
@@ -87,8 +87,9 @@ class SelectAudioSheetViewModel {
 
     func dismissError() {
         showError = false
+        errorMessage = nil
     }
-    
+
     private func clearEditState() {
         itemToEdit = nil
         tempName = ""

@@ -13,7 +13,7 @@ import Observation
 
 struct MovieFile: Transferable {
     let url: URL
-    
+
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(contentType: .movie) { movie in
             SentTransferredFile(movie.url)
@@ -29,113 +29,76 @@ struct MovieFile: Transferable {
 class AudioImportManager {
     var isExtracting = false
     var errorMessage: String?
-    
-    var fileService = AudioFileService.shared
-    
-    // processes a PhotosPickerItem and extracts audio. Returns audio data and title
+
+    private let fileService: FileManagementService
+
+    init(fileService: FileManagementService = AudioFileService()) {
+        self.fileService = fileService
+    }
+
     func processVideo(from item: PhotosPickerItem) async throws -> (filename: String, title: String) {
-        print("TEMP: Extracing start")
+        Log.audio.info("Starting video extraction")
         isExtracting = true
         errorMessage = nil
-        
-        defer {
-            isExtracting = false
-        }
-        
-        print("Loading movie file")
+
+        defer { isExtracting = false }
+
         guard let videoFile = try await item.loadTransferable(type: MovieFile.self) else {
-            throw ExtractionError.failedToLoadVideo
+            throw SoundbiteError.audioExtractionFailed("Failed to load video")
         }
-        print("done loading movie file")
+
         let tempVideoURL = videoFile.url
-        
-        // make sure file is less than 1gb so we don't crash
+
         let resources = try tempVideoURL.resourceValues(forKeys: [.fileSizeKey])
         if let fileSize = resources.fileSize, fileSize > 1_000_000_000 {
-            throw ExtractionError.fileTooLarge
+            throw SoundbiteError.fileTooLarge(fileSize / 1_000_000)
         }
-        
-        defer {
-            try? FileManager.default.removeItem(at: tempVideoURL)
-        }
-        print("TEMP: about to call extract audio")
-        // convert to audio only file, save to disk, and return file name
+
+        defer { try? FileManager.default.removeItem(at: tempVideoURL) }
+
         let filename = try await extractAudio(from: tempVideoURL)
-        
         let title = generateTitle(from: tempVideoURL)
-        
+
+        Log.audio.info("Extraction complete: \(title)")
         return (filename, title)
     }
-    
-    // extracts audio from a video URL and returns the location of the file
+
     private func extractAudio(from videoURL: URL) async throws -> String {
         let asset = AVURLAsset(url: videoURL)
         let composition = AVMutableComposition()
-        print("TEMP: Extract audio called")
-        // make sure asset has an audio track
+
         guard let sourceAudioTrack = try await asset.loadTracks(withMediaType: .audio).first,
-            let compositionTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            throw ExtractionError.noAudioTrack
+              let compositionTrack = composition.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
+            throw SoundbiteError.noAudioTrack
         }
-        
+
         let duration = try await asset.load(.duration)
         try compositionTrack.insertTimeRange(
             CMTimeRange(start: .zero, duration: duration),
             of: sourceAudioTrack, at: .zero
         )
-        
-        // configure export
+
         guard let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetPassthrough) else {
-            print("export session failed")
-            throw ExtractionError.exportSessionFailed
+            throw SoundbiteError.audioExtractionFailed("Failed to create export session")
         }
-        
+
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("m4a")
-        
+
         exportSession.outputURL = outputURL
         exportSession.outputFileType = .m4a
-        print("TEMP: pre export session")
-        // export
+
         try await exportSession.export(to: outputURL, as: .m4a)
-        
-        defer {
-            // clean up file
-            try? FileManager.default.removeItem(at: outputURL)
-        }
-        print("TEMP: post export session")
+
+        defer { try? FileManager.default.removeItem(at: outputURL) }
+
         let filename = try await fileService.moveAudio(from: outputURL)
-        
         return filename
     }
-    
-    // generates a default title from the video file name
+
     func generateTitle(from videoURL: URL) -> String {
         let fileName = videoURL.deletingPathExtension().lastPathComponent
         return fileName.isEmpty ? "Untitled Recording" : fileName
-    }
-    
-    enum ExtractionError: LocalizedError {
-        case failedToLoadVideo
-        case noAudioTrack
-        case exportSessionFailed
-        case exportFailed(Error)
-        case fileTooLarge
-        
-        var errorDescription: String? {
-            switch self {
-            case .failedToLoadVideo:
-                return "Failed to load the selected video."
-            case .noAudioTrack:
-                return "The selected video does not contain an audio track."
-            case .exportSessionFailed:
-                return "Failed to create audio export session."
-            case .exportFailed(let error):
-                return "Failed to export audio: \(error.localizedDescription)"
-            case .fileTooLarge:
-                return "File was too big"
-            }
-        }
     }
 }

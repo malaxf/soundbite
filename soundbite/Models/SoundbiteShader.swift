@@ -49,11 +49,14 @@ nonisolated enum SoundbiteShader: String, Codable, CaseIterable, Sendable {
     case horizontalLinesInVoidReactive
     case circlesInVoidReactive
     case diamondsInVoidReactive
-    
+
     // Void pack non-reactive
     case diamondsInVoid
     case circlesInVoid
-    
+
+    // Phosphor pack
+    case phosphorTunnelReactive
+
     var isReactive: Bool {
         self.rawValue.contains("Reactive")
     }

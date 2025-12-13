@@ -10,16 +10,10 @@ import SwiftData
 
 struct ProjectsScreen: View {
     @Environment(\.modelContext) var context
-    
-    @State private var showNewProjectSheet = false
-    @State private var navigationManager = NavigationManager()
-    
     @Query private var projects: [Project]
-    
-    private var service: ProjectService {
-        ProjectService(modelContext: context)
-    }
-    
+    @State private var viewModel = ProjectsViewModel()
+    @State private var navigationManager = NavigationManager()
+
     var body: some View {
         NavigationStack(path: $navigationManager.path) {
             VStack {
@@ -34,39 +28,26 @@ struct ProjectsScreen: View {
             .navigationDestination(for: Project.self) { project in
                 ProjectCanvasScreen(project: project)
             }
-            .sheet(isPresented: $showNewProjectSheet) {
+            .sheet(isPresented: $viewModel.showNewProjectSheet) {
                 SelectAudioSheetView(onSelection: { recording in
-                    
-                    guard let newProject = service.createNewProject(from: recording) else {
-                        showNewProjectSheet = false
-                        return
-                    }
-                    
-                    showNewProjectSheet = false
-                    navigationManager.navigateToEditor(for: newProject)
+                    viewModel.createProject(from: recording, navigationManager: navigationManager)
                 })
                 .presentationBackground(Color.background)
             }
+            .alert("Error", isPresented: $viewModel.showError) {
+                Button("OK") {}
+            } message: {
+                Text(viewModel.errorMessage ?? "An error occurred")
+            }
         }
         .onAppear {
-            for project in projects {
-                print(project.songFilename)
-            }
-            if projects.isEmpty {
-                print("projects are empty")
-            }
+            viewModel.configure(with: context)
         }
-        .onChange(of: projects) { _,_ in
-            for project in projects {
-                print(project.songFilename)
-            }
-        }
-        
     }
-    
+
     private var newProjectButton: some View {
         Button {
-            showNewProjectSheet = true
+            viewModel.showNewProjectSheet = true
         } label: {
             HStack {
                 Text("New Project")
@@ -77,10 +58,9 @@ struct ProjectsScreen: View {
             .frame(height: 72)
             .background(Color.container)
             .cornerRadius(24)
-               
         }
     }
-    
+
     private var projectsList: some View {
         VStack(spacing: 16) {
             ForEach(projects) { project in
@@ -96,8 +76,3 @@ struct ProjectsScreen: View {
         }
     }
 }
-
-//#Preview {
-//    ProjectsScreen()
-//        .preferredColorScheme(.dark)
-//}

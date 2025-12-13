@@ -27,12 +27,11 @@ actor ProjectExportManager {
         guard let audioURL = project.fileURL else {
             throw ExportError.fileSetupFailed
         }
-        
+
         let audioReader = try await OfflineAudioReader(audioURL: audioURL)
         let duration = try await AVURLAsset(url: audioURL).load(.duration).seconds
 
-        // DEBUG: Log duration from AVURLAsset
-        print("DEBUG [Export]: AVURLAsset duration = \(duration)s")
+        Log.export.debug("Duration: \(duration)s")
         
         if FileManager.default.fileExists(atPath: outputURL.path()) {
             try FileManager.default.removeItem(at: outputURL)
@@ -73,8 +72,7 @@ actor ProjectExportManager {
         let renderer = try await OfflineMetalRenderer(shader: shaderType)
         
         let totalFrames = Int(duration * Double(fps))
-        print("DEBUG [Export]: totalFrames = \(totalFrames) (duration=\(duration)s × fps=\(fps))")
-        print("Starting Export: with \(totalFrames) frames")
+        Log.export.info("Starting export: \(totalFrames) frames")
         
         for i in 0..<totalFrames {
                     if writer.status == .failed { throw ExportError.writerFailed }
@@ -97,7 +95,7 @@ actor ProjectExportManager {
                     let result = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBufferOut)
                     
                     guard result == kCVReturnSuccess, let pixelBuffer = pixelBufferOut else {
-                        print("Buffer allocation failed at frame \(i)")
+                        Log.export.error("Buffer allocation failed at frame \(i)")
                         throw ExportError.fileSetupFailed
                     }
                     
@@ -111,28 +109,23 @@ actor ProjectExportManager {
                         fftData: fftData
                     )
                     
-                    // 4. Append
                     if !adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
-                        print("Failed to append frame at \(seconds)s")
+                        Log.export.error("Failed to append frame at \(seconds)s")
                         throw ExportError.writerFailed
                     }
                     
                     // 5. Cleanup helps prevents memory spikes
                     pixelBufferOut = nil
                     
-                    // DEBUG: Log FFT values and progress every 60 frames (once per second)
                     if i % 60 == 0 {
-                        let maxFFT = fftData.max() ?? 0
-                        let minFFT = fftData.min() ?? 0
-                        let avgFFT = fftData.isEmpty ? 0 : fftData.reduce(0, +) / Float(fftData.count)
-                        let zeroCount = fftData.filter { $0 == 0 }.count
-                        print("Progress: \(Int(Double(i) / Double(totalFrames) * 100))% | frame=\(i), time=\(String(format: "%.2f", seconds))s, FFT min=\(String(format: "%.3f", minFFT)), max=\(String(format: "%.3f", maxFFT)), avg=\(String(format: "%.3f", avgFFT)), zeros=\(zeroCount)/\(fftData.count)")
+                        let progress = Int(Double(i) / Double(totalFrames) * 100)
+                        Log.export.debug("Progress: \(progress)%")
                     }
                 }
         
         videoInput.markAsFinished()
         await writer.finishWriting()
-        print("Export Complete")
+        Log.export.info("Export complete")
         
     }
 }
@@ -168,30 +161,22 @@ private class OfflineAudioReader {
         try file.read(into: buffer)
         self.monoSamples = FFTAudioProcessor.convertBufferToMono(buffer)
 
-        // DEBUG: Log audio file info
-        print("DEBUG [AudioReader]: monoSamples.count = \(monoSamples.count)")
-        print("DEBUG [AudioReader]: sampleRate = \(sampleRate)")
-        print("DEBUG [AudioReader]: calculated duration from samples = \(Double(monoSamples.count) / sampleRate)s")
+        Log.export.debug("Audio loaded: \(monoSamples.count) samples at \(sampleRate)Hz")
     }
 
     func getFrequencyData(at time: TimeInterval) -> [Float] {
         let index = Int(time * sampleRate)
         let fftSize = processor.sampleSize
 
-        // Default empty return if out of bounds
         guard index + fftSize < monoSamples.count else {
-            print("DEBUG [AudioReader]: OUT OF BOUNDS at time=\(time)s, index=\(index), needed=\(index + fftSize), have=\(monoSamples.count)")
             return previousFFT ?? [Float](repeating: 0, count: 64)
         }
 
         let chunk = Array(monoSamples[index..<(index + fftSize)])
 
-        // reverse like in display
         var result = Array(processor.performAndProcessFFT(on: chunk).reversed())
 
-        // DEBUG: Check for empty FFT result
         if result.isEmpty {
-            print("DEBUG [AudioReader]: FFT returned EMPTY at time=\(time)s")
             return previousFFT ?? [Float](repeating: 0, count: 64)
         }
 
@@ -238,7 +223,7 @@ private class OfflineMetalRenderer {
         let kernelName = "exportable" + shader.rawValue.prefix(1).uppercased() + shader.rawValue.dropFirst()
         
         guard let function = library.makeFunction(name: kernelName) else {
-            print("Could not find kernel function: \(kernelName)")
+            Log.export.error("Could not find kernel function: \(kernelName)")
             throw ProjectExportManager.ExportError.shaderInitializationFailed
         }
         
@@ -257,15 +242,11 @@ private class OfflineMetalRenderer {
               let pipelineState = pipelineState,
               let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else {
-            print("DEBUG [Renderer]: FAILED to create command buffer or encoder at time=\(time)")
             return
         }
 
-        // 1. Lock pixel buffer FIRST before any GPU operations
         let lockResult = CVPixelBufferLockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
-        if lockResult != kCVReturnSuccess {
-            print("DEBUG [Renderer]: Failed to lock pixel buffer at time=\(time)")
-        }
+        guard lockResult == kCVReturnSuccess else { return }
 
         // 2. Create Metal Texture from CVPixelBuffer
         var cvTexture: CVMetalTexture?
@@ -281,15 +262,9 @@ private class OfflineMetalRenderer {
             &cvTexture
         )
 
-        if textureStatus != kCVReturnSuccess {
-            print("DEBUG [Renderer]: FAILED to create texture, status=\(textureStatus) at time=\(time)")
-            CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
-            return
-        }
-
-        guard let cvTexture = cvTexture,
+        guard textureStatus == kCVReturnSuccess,
+              let cvTexture = cvTexture,
               let texture = CVMetalTextureGetTexture(cvTexture) else {
-            print("DEBUG [Renderer]: FAILED to get Metal texture from CVTexture at time=\(time)")
             CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
             return
         }
@@ -301,14 +276,7 @@ private class OfflineMetalRenderer {
         var timeVal = time
         var sizeVal = SIMD2<Float>(Float(size.width), Float(size.height))
 
-        // DEBUG: Only warn on potential issues (empty or all-zero FFT)
-        if fftData.isEmpty {
-            print("DEBUG [Renderer]: WARNING - fftData is EMPTY at time=\(time)")
-        } else if (fftData.max() ?? 0) == 0 {
-            print("DEBUG [Renderer]: WARNING - ALL FFT values are ZERO at time=\(time)")
-        }
-
-        // 4. Encode Commands
+        // Encode Commands
         encoder.setComputePipelineState(pipelineState)
         encoder.setTexture(texture, index: 0)
 
@@ -326,8 +294,6 @@ private class OfflineMetalRenderer {
         safeFFTData.withUnsafeBytes { bufferPointer in
             if let baseAddress = bufferPointer.baseAddress {
                 encoder.setBytes(baseAddress, length: bufferPointer.count, index: 4)
-            } else {
-                print("DEBUG [Renderer]: CRITICAL - baseAddress is nil for FFT buffer at time=\(time)")
             }
         }
 
@@ -342,18 +308,9 @@ private class OfflineMetalRenderer {
         encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         encoder.endEncoding()
 
-        // 6. Commit and wait for GPU to complete
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
-
-        if commandBuffer.status == .error {
-            print("DEBUG [Renderer]: Metal command buffer FAILED - \(commandBuffer.error?.localizedDescription ?? "unknown error")")
-        }
-
-        // 7. Flush texture cache to ensure GPU writes are visible to CPU
         CVMetalTextureCacheFlush(textureCache, 0)
-
-        // 8. Unlock pixel buffer AFTER all GPU operations complete
         CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
     }
 }
