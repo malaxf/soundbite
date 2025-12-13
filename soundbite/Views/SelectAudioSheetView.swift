@@ -10,34 +10,26 @@ import SwiftData
 import PhotosUI
 
 struct SelectAudioSheetView: View {
-    var onSelection: (_: AudioRecording) -> ()
-    
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @Query private var audioRecordings: [AudioRecording]
+
+    @State private var viewModel = SelectAudioSheetViewModel()
     
-    @State private var showVideoPicker = false
-    @State private var selectedVideoItem: PhotosPickerItem?
-    @State private var audioImporter = AudioImportManager()
-    @State private var showError = false
-    
-    @State private var showDeleteAlert = false
-    @State private var showRenameAlert = false
-    @State private var tempName = ""
-    @State private var itemToEdit: AudioRecording? = nil
-    
+    var onSelection: (_: AudioRecording) -> ()
+
     var body: some View {
         VStack(spacing: 24) {
             Text("Select Song")
                 .font(.title2)
                 .foregroundStyle(Color.foreground)
-            
-            if audioImporter.isExtracting {
+
+            if viewModel.isExtracting {
                 ProgressView("Extracting audio...")
                     .foregroundStyle(Color.foreground)
             }
-            
-            PhotosPicker(selection: $selectedVideoItem, matching: .videos, preferredItemEncoding: .current) {
+
+            PhotosPicker(selection: $viewModel.selectedVideoItem, matching: .videos, preferredItemEncoding: .current) {
                 Text("Add Song from Video")
                     .font(.title3)
                     .frame(maxWidth: .infinity)
@@ -46,8 +38,8 @@ struct SelectAudioSheetView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 24))
                     .foregroundStyle(Color.foreground)
             }
-            .disabled(extractor.isExtracting)
-            
+            .disabled(viewModel.isExtracting)
+
             // List of existing audio recordings
             if !audioRecordings.isEmpty {
                 audioReordingsList
@@ -56,55 +48,45 @@ struct SelectAudioSheetView: View {
                     .foregroundStyle(.secondary)
                     .padding()
             }
-            
+
             Spacer()
         }
         .padding()
-        .onChange(of: selectedVideoItem) { oldValue, newValue in
+        .onChange(of: viewModel.selectedVideoItem) { oldValue, newValue in
             Task {
-                await handleVideoSelection(newValue)
+                await viewModel.handleVideoSelection(newValue, modelContext: modelContext)
             }
         }
-        .alert("Rename Song", isPresented: $showRenameAlert) {
-            TextField("New Name", text: $tempName)
+        .alert("Rename Song", isPresented: $viewModel.showRenameAlert) {
+            TextField("New Name", text: $viewModel.tempName)
             Button("Save") {
-                guard let item = itemToEdit else {
-                    return
-                }
-                item.title = tempName
-                itemToEdit = nil
-                tempName = ""
+                viewModel.confirmRename()
             }
             Button("Cancel", role: .cancel) {
-                itemToEdit = nil
-                tempName = ""
+                viewModel.cancelRename()
             }
         }
-        .alert("Delete Song?", isPresented: $showDeleteAlert) {
+        .alert("Delete Song?", isPresented: $viewModel.showDeleteAlert) {
             Button("Delete", role: .destructive) {
-                guard let item = itemToEdit else {
-                    return
-                }
-                
                 withAnimation {
-                    modelContext.delete(item)
-                    itemToEdit = nil
+                    viewModel.confirmDelete(modelContext: modelContext)
                 }
-                try? modelContext.save()
             }
             Button("Cancel", role: .cancel) {
-                itemToEdit = nil
+                viewModel.cancelDelete()
             }
         }
-        .alert("Error", isPresented: $showError) {
-            Button("OK", role: .cancel) {}
+        .alert("Error", isPresented: $viewModel.showError) {
+            Button("OK", role: .cancel) {
+                viewModel.dismissError()
+            }
         } message: {
-            if let errorMessage = extractor.errorMessage {
+            if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
             }
         }
     }
-    
+
     private var audioReordingsList: some View {
         ScrollView {
             VStack(spacing: 12) {
@@ -123,23 +105,21 @@ struct SelectAudioSheetView: View {
                             }
                             Spacer()
                         }
-                        
+
                         Menu {
                             Button {
-                                itemToEdit = recording
-                                showRenameAlert = true
+                                viewModel.startRename(for: recording)
                             } label: {
                                 Text("Edit title")
                                 Image(systemName: "pencil")
                             }
                             Button(role: .destructive) {
-                                itemToEdit = recording
-                                showDeleteAlert = true
+                                viewModel.startDelete(for: recording)
                             } label: {
                                 Text("Delete song")
                                 Image(systemName: "trash")
                             }
-                            
+
                         } label: {
                             Image(systemName: "ellipsis")
                                 .foregroundStyle(Color.foreground)
@@ -149,7 +129,7 @@ struct SelectAudioSheetView: View {
                                         .clipShape(RoundedRectangle(cornerRadius: 20))
                                 }
                                 .frame(width: 56, height: 56)
-                            
+
                         }
                     }
                     .foregroundStyle(Color.foreground)
@@ -157,44 +137,16 @@ struct SelectAudioSheetView: View {
                     .frame(maxWidth: .infinity)
                     .background(Color.container)
                     .clipShape(RoundedRectangle(cornerRadius: 24))
-                    
-                    
+
+
                 }
             }
-        }
-    }
-    
-    private func handleVideoSelection(_ item: PhotosPickerItem?) async {
-        guard let item = item else { return }
-        
-        do {
-            // Process video and extract audio
-            let (filename, title) = try await extractor.processVideo(from: item)
-            
-            // MARK: instead of sacing the recordign immediately, we can have the user name the recordign while the extractor is processing the video
-            
-            // Create and save AudioRecording
-            let recording = AudioRecording(
-                title: title,
-                dateCreated: Date(),
-                filename: filename
-            )
-            
-            modelContext.insert(recording)
-            try modelContext.save()
-            
-            // Reset picker
-            selectedVideoItem = nil
-            
-        } catch {
-            extractor.errorMessage = error.localizedDescription
-            showError = true
         }
     }
 }
 
 #Preview {
     SelectAudioSheetView { _ in
-        
+
     }
 }
