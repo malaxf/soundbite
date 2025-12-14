@@ -44,6 +44,11 @@ nonisolated enum ProjectBackground: Codable, Sendable, Equatable {
 }
 
 
+enum ShaderPack: String, CaseIterable {
+    case void = "Void"
+    case phosphor = "Phosphor"
+}
+
 nonisolated enum SoundbiteShader: String, Codable, CaseIterable, Sendable {
     // Void pack reactive
     case horizontalLinesInVoidReactive
@@ -56,9 +61,44 @@ nonisolated enum SoundbiteShader: String, Codable, CaseIterable, Sendable {
 
     // Phosphor pack
     case phosphorTunnelReactive
+    case phosphorFabricReactive
 
     var isReactive: Bool {
         self.rawValue.contains("Reactive")
+    }
+
+    var pack: ShaderPack {
+        switch self {
+        case .horizontalLinesInVoidReactive, .circlesInVoidReactive, .diamondsInVoidReactive,
+             .diamondsInVoid, .circlesInVoid:
+            return .void
+        case .phosphorTunnelReactive, .phosphorFabricReactive:
+            return .phosphor
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .horizontalLinesInVoidReactive: return "Lines"
+        case .circlesInVoidReactive: return "Circles"
+        case .diamondsInVoidReactive: return "Diamonds"
+        case .diamondsInVoid: return "Diamonds"
+        case .circlesInVoid: return "Circles"
+        case .phosphorTunnelReactive: return "Tunnel"
+        case .phosphorFabricReactive: return "Fabric"
+        }
+    }
+
+    var iconName: String {
+        switch self {
+        case .horizontalLinesInVoidReactive: return "line.3.horizontal"
+        case .circlesInVoidReactive: return "circle.grid.2x2"
+        case .diamondsInVoidReactive: return "diamond"
+        case .diamondsInVoid: return "diamond"
+        case .circlesInVoid: return "circle.grid.2x2"
+        case .phosphorTunnelReactive: return "circle.dotted"
+        case .phosphorFabricReactive: return "square.grid.3x3"
+        }
     }
 }
 

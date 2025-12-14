@@ -18,7 +18,7 @@ final class ProjectService: ProjectRepository {
         self.fileService = fileService
     }
 
-    func createProject(from audio: AudioRecording) throws -> Project {
+    func createProject(name: String, from audio: AudioRecording) throws -> Project {
         let newID = UUID()
         let newFilename = newID.uuidString + ".m4a"
 
@@ -29,7 +29,7 @@ final class ProjectService: ProjectRepository {
         do {
             try fileService.cloneAudio(from: sourceURL, to: newFilename)
 
-            let newProject = Project(songFilename: newFilename)
+            let newProject = Project(name: name, songFilename: newFilename)
             newProject.id = newID
 
             modelContext.insert(newProject)

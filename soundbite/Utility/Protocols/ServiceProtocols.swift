@@ -17,6 +17,6 @@ protocol FileManagementService: Sendable {
 
 @MainActor
 protocol ProjectRepository {
-    func createProject(from audio: AudioRecording) throws -> Project
+    func createProject(name: String, from audio: AudioRecording) throws -> Project
     func deleteProject(_ project: Project) throws
 }

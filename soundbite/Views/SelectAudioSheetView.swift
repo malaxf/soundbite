@@ -20,8 +20,8 @@ struct SelectAudioSheetView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Text("Select Song")
-                .font(.title2)
+            Text("Create project from song")
+                .font(.headline)
                 .foregroundStyle(Color.foreground)
 
             if viewModel.isExtracting {
@@ -45,7 +45,7 @@ struct SelectAudioSheetView: View {
                 audioReordingsList
             } else {
                 Text("No audio recordings yet")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.onContainer)
                     .padding()
             }
 
@@ -84,6 +84,17 @@ struct SelectAudioSheetView: View {
             if let errorMessage = viewModel.errorMessage {
                 Text(errorMessage)
             }
+        }
+        .alert("Name Your Song", isPresented: $viewModel.showNameNewSongAlert) {
+            TextField("Song Name", text: $viewModel.tempName)
+            Button("Save") {
+                viewModel.confirmNewSongName(modelContext: modelContext)
+            }
+            Button("Cancel", role: .cancel) {
+                viewModel.cancelNewSong()
+            }
+        } message: {
+            Text("Enter a name for this song")
         }
     }
 
@@ -125,7 +136,7 @@ struct SelectAudioSheetView: View {
                                 .foregroundStyle(Color.foreground)
                                 .frame(width: 48, height: 48)
                                 .background {
-                                    Color.container.mix(with: Color.white, by: 0.2)
+                                    Color.onContainer
                                         .clipShape(RoundedRectangle(cornerRadius: 20))
                                 }
                                 .frame(width: 56, height: 56)

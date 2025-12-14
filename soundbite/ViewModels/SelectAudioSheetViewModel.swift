@@ -16,9 +16,13 @@ final class SelectAudioSheetViewModel {
     var showError = false
     var showDeleteAlert = false
     var showRenameAlert = false
+    var showNameNewSongAlert = false
     var tempName = ""
     var itemToEdit: AudioRecording?
     var errorMessage: String?
+
+    var pendingFilename: String?
+    var pendingSuggestedTitle: String?
 
     private let audioImporter = AudioImportManager()
 
@@ -32,14 +36,10 @@ final class SelectAudioSheetViewModel {
         do {
             let (filename, title) = try await audioImporter.processVideo(from: item)
 
-            let recording = AudioRecording(
-                title: title,
-                dateCreated: Date(),
-                filename: filename
-            )
-
-            modelContext.insert(recording)
-            try modelContext.save()
+            pendingFilename = filename
+            pendingSuggestedTitle = title
+            tempName = title
+            showNameNewSongAlert = true
 
             selectedVideoItem = nil
         } catch {
@@ -47,6 +47,46 @@ final class SelectAudioSheetViewModel {
             errorMessage = error.localizedDescription
             showError = true
         }
+    }
+
+    func confirmNewSongName(modelContext: ModelContext) {
+        guard let filename = pendingFilename else { return }
+
+        let finalTitle = tempName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? (pendingSuggestedTitle ?? "Untitled Recording")
+            : tempName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let recording = AudioRecording(
+            title: finalTitle,
+            dateCreated: Date(),
+            filename: filename
+        )
+
+        modelContext.insert(recording)
+        do {
+            try modelContext.save()
+        } catch {
+            Log.audio.error(error)
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+
+        clearPendingSong()
+    }
+
+    func cancelNewSong() {
+        if let filename = pendingFilename {
+            Task {
+                await AudioFileService().deleteAudio(filename: filename)
+            }
+        }
+        clearPendingSong()
+    }
+
+    private func clearPendingSong() {
+        pendingFilename = nil
+        pendingSuggestedTitle = nil
+        tempName = ""
     }
 
     func startRename(for recording: AudioRecording) {

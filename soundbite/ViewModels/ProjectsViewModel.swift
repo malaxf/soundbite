@@ -13,8 +13,11 @@ import Observation
 @MainActor @Observable
 final class ProjectsViewModel {
     var showNewProjectSheet = false
+    var showNameProjectSheet = false
     var errorMessage: String?
     var showError = false
+
+    var selectedAudioRecording: AudioRecording?
 
     private var repository: ProjectRepository?
 
@@ -22,17 +25,30 @@ final class ProjectsViewModel {
         self.repository = ProjectService(modelContext: context, fileService: AudioFileService())
     }
 
-    func createProject(from audio: AudioRecording, navigationManager: NavigationManager) {
-        guard let repository else { return }
+    func onAudioSelected(_ audio: AudioRecording) {
+        selectedAudioRecording = audio
+        showNewProjectSheet = false
+        showNameProjectSheet = true
+    }
+
+    func createProject(name: String, navigationManager: NavigationManager) {
+        guard let repository, let audio = selectedAudioRecording else { return }
 
         do {
-            let project = try repository.createProject(from: audio)
-            showNewProjectSheet = false
+            let project = try repository.createProject(name: name, from: audio)
+            showNameProjectSheet = false
+            selectedAudioRecording = nil
             navigationManager.navigateToEditor(for: project)
         } catch {
             handleError(error)
-            showNewProjectSheet = false
+            showNameProjectSheet = false
+            selectedAudioRecording = nil
         }
+    }
+
+    func cancelProjectCreation() {
+        showNameProjectSheet = false
+        selectedAudioRecording = nil
     }
 
     func deleteProject(_ project: Project) {

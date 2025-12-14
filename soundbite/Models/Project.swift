@@ -12,10 +12,13 @@ import SwiftUI
 @Model
 final class Project {
     var id: UUID
+    var name: String
+    var createdAt: Date
     var songFilename: String
     var background: ProjectBackground
-    
+
     init(
+        name: String,
         songFilename: String,
         background: ProjectBackground = .shader(
             type: .horizontalLinesInVoidReactive,
@@ -24,6 +27,8 @@ final class Project {
         )
     ) {
         self.id = UUID()
+        self.name = name
+        self.createdAt = Date()
         self.songFilename = songFilename
         self.background = background
     }

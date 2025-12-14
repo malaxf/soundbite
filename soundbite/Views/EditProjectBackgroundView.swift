@@ -10,8 +10,12 @@ import SwiftUI
 struct EditProjectBackgroundView: View {
     let project: Project
     
-    var reactiveShaders: [SoundbiteShader] {
-        SoundbiteShader.allCases.filter({ $0.isReactive })
+    var voidShaders: [SoundbiteShader] {
+        SoundbiteShader.allCases.filter { $0.isReactive && $0.pack == .void }
+    }
+
+    var phosphorShaders: [SoundbiteShader] {
+        SoundbiteShader.allCases.filter { $0.isReactive && $0.pack == .phosphor }
     }
     
     let primaryColors: [CGColor] = [
@@ -41,13 +45,23 @@ struct EditProjectBackgroundView: View {
     
 
     var body: some View {
-        VStack(spacing: 20) {
-            HStack {
-                ForEach(reactiveShaders, id: \.rawValue) { shader in
-                    shaderSelectionButton(title: shader.rawValue, shader: shader)
+        VStack(spacing: 24) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Shader")
+                    .font(.headline)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 16)
+
+                ScrollView(.horizontal) {
+                    HStack(spacing: 20) {
+                        shaderPackSection(title: "Void", shaders: voidShaders)
+                        shaderPackSection(title: "Phosphor", shaders: phosphorShaders)
+                    }
+                    .padding(.horizontal, 16)
                 }
+                .scrollIndicators(.hidden)
             }
-            
+
             if project.background.isShader {
                 VStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -87,23 +101,56 @@ struct EditProjectBackgroundView: View {
     }
     
     
-    func shaderSelectionButton(title: String, shader: SoundbiteShader) -> some View {
-        Button(title) {
-            if project.background.shaderType != shader {
+    func shaderPackSection(title: String, shaders: [SoundbiteShader]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption2)
+                .fontWeight(.semibold)
+                .foregroundStyle(Color.foreground.opacity(0.8))
+                .textCase(.uppercase)
+
+            HStack(spacing: 8) {
+                ForEach(shaders, id: \.rawValue) { shader in
+                    shaderSelectionButton(shader: shader)
+                }
+            }
+        }
+    }
+
+    func shaderSelectionButton(shader: SoundbiteShader) -> some View {
+        let isSelected = project.background.shaderType == shader
+
+        return Button {
+            if !isSelected {
                 var newPrimary = ShaderColor.blue
                 var newSecondary = ShaderColor.pink
-                
+
                 if case .shader(_, let currentPrimary, let currentSecondary) = project.background {
                     newPrimary = currentPrimary
                     newSecondary = currentSecondary
                 }
-                
+
                 project.background = .shader(
                     type: shader,
                     primary: newPrimary,
                     secondary: newSecondary
                 )
-                
+            }
+        } label: {
+            VStack(spacing: 8) {
+                Image(systemName: shader.iconName)
+                    .font(.title2)
+                Text(shader.displayName)
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            .frame(width: 72, height: 72)
+            .foregroundStyle(isSelected ? Color.white : Color.foreground)
+            .background(isSelected ? Color.accentColor : Color.container)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(isSelected ? Color.white.opacity(0.3) : Color.clear, lineWidth: 2)
             }
         }
     }

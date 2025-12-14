@@ -17,27 +17,50 @@ struct ProjectsScreen: View {
     var body: some View {
         NavigationStack(path: $navigationManager.path) {
             VStack {
-                newProjectButton
-                projectsList
-                Spacer()
+                if projects.isEmpty {
+                    Spacer()
+                    Text("Tap the + above to create a new project")
+                        .foregroundStyle(Color.onContainer)
+                    Spacer()
+                } else {
+                    projectsList
+                    Spacer()
+                }
             }
             .padding(16)
             .background(Color.background.ignoresSafeArea())
-            .navigationTitle(Text("Projects"))
-            .navigationBarTitleDisplayMode(.large)
+            .navigationTitle(Text("My Projects"))
+            .navigationBarTitleDisplayMode(.inline)
             .navigationDestination(for: Project.self) { project in
                 ProjectCanvasScreen(project: project)
             }
             .sheet(isPresented: $viewModel.showNewProjectSheet) {
                 SelectAudioSheetView(onSelection: { recording in
-                    viewModel.createProject(from: recording, navigationManager: navigationManager)
+                    viewModel.onAudioSelected(recording)
                 })
                 .presentationBackground(Color.background)
+            }
+            .sheet(isPresented: $viewModel.showNameProjectSheet, onDismiss: {
+                viewModel.cancelProjectCreation()
+            }) {
+                if let recording = viewModel.selectedAudioRecording {
+                    NameProjectView(songTitle: recording.title) { projectName in
+                        viewModel.createProject(name: projectName, navigationManager: navigationManager)
+                    }
+                    .presentationBackground(Color.background)
+                }
             }
             .alert("Error", isPresented: $viewModel.showError) {
                 Button("OK") {}
             } message: {
                 Text(viewModel.errorMessage ?? "An error occurred")
+            }
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("", systemImage: "plus") {
+                        viewModel.showNewProjectSheet = true
+                    }
+                }
             }
         }
         .onAppear {
@@ -45,32 +68,32 @@ struct ProjectsScreen: View {
         }
     }
 
-    private var newProjectButton: some View {
-        Button {
-            viewModel.showNewProjectSheet = true
-        } label: {
-            HStack {
-                Text("New Project")
-                    .font(.title2)
-                    .foregroundStyle(Color.foreground)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 72)
-            .background(Color.container)
-            .cornerRadius(24)
-        }
-    }
-
     private var projectsList: some View {
-        VStack(spacing: 16) {
-            ForEach(projects) { project in
-                Button {
-                    navigationManager.navigateToEditor(for: project)
-                } label: {
-                    Text(project.id.uuidString)
-                        .frame(height: 56)
+        ScrollView {
+            VStack(spacing: 16) {
+                ForEach(projects) { project in
+                    Button {
+                        navigationManager.navigateToEditor(for: project)
+                    } label: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(project.name)
+                                    .font(.title2)
+                                    .foregroundStyle(Color.foreground)
+                                Text(project.createdAt, style: .date)
+                                    .font(.subheadline)
+                                    .foregroundStyle(Color.onContainer)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundStyle(Color.onContainer)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 96)
                         .frame(maxWidth: .infinity)
                         .background(Color.container)
+                        .clipShape(RoundedRectangle(cornerRadius: 24))
+                    }
                 }
             }
         }

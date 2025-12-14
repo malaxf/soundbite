@@ -23,31 +23,43 @@ actor ProjectExportManager {
     let fps: Int32 = 60
     let resolution = CGSize(width: 1080, height: 1920)
     
-    func export(project: Project, to outputURL: URL) async throws {
+    func export(
+        project: Project,
+        to outputURL: URL,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
         guard let audioURL = project.fileURL else {
             throw ExportError.fileSetupFailed
         }
 
+        Log.export.debug("[TIMING] Starting audio reader init...")
         let audioReader = try await OfflineAudioReader(audioURL: audioURL)
-        let duration = try await AVURLAsset(url: audioURL).load(.duration).seconds
+        Log.export.debug("[TIMING] Audio reader init complete")
 
+        Log.export.debug("[TIMING] Loading duration...")
+        let duration = try await AVURLAsset(url: audioURL).load(.duration).seconds
         Log.export.debug("Duration: \(duration)s")
-        
+
         if FileManager.default.fileExists(atPath: outputURL.path()) {
             try FileManager.default.removeItem(at: outputURL)
         }
-        
+
+        Log.export.debug("[TIMING] Creating AVAssetWriter...")
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-        
+        Log.export.debug("[TIMING] AVAssetWriter instance created")
+
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: resolution.width,
             AVVideoHeightKey: resolution.height
         ]
-        
+
+        Log.export.debug("[TIMING] Creating AVAssetWriterInput...")
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = false
-        
+        Log.export.debug("[TIMING] AVAssetWriterInput created")
+
+        Log.export.debug("[TIMING] Creating PixelBufferAdaptor...")
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput,
             sourcePixelBufferAttributes: [
@@ -57,76 +69,98 @@ actor ProjectExportManager {
                 kCVPixelBufferMetalCompatibilityKey as String: true
             ]
         )
-        
+        Log.export.debug("[TIMING] PixelBufferAdaptor created")
+
+        Log.export.debug("[TIMING] Adding input to writer...")
         writer.add(videoInput)
+        Log.export.debug("[TIMING] Input added")
+
+        // Yield to allow any pending main thread work to complete before the potentially
+        // blocking writer.start() call (AVFoundation may dispatch_sync to main internally)
+        await Task.yield()
+
+        Log.export.debug("[TIMING] Calling writer.start()...")
         try writer.start()
+        Log.export.debug("[TIMING] writer.start() complete")
+
+        Log.export.debug("[TIMING] Starting session...")
         writer.startSession(atSourceTime: .zero)
-        
+        Log.export.debug("[TIMING] AVAssetWriter ready")
+
         guard let shaderType = project.background.shaderType,
               let primary = project.background.primaryShaderColor,
               let secondary = project.background.secondaryShaderColor else {
-            // You might want a fallback here, but for now we error out
             throw ExportError.shaderInitializationFailed
         }
-        
+
+        Log.export.debug("[TIMING] Creating Metal renderer...")
         let renderer = try await OfflineMetalRenderer(shader: shaderType)
-        
+        Log.export.debug("[TIMING] Metal renderer ready")
+
         let totalFrames = Int(duration * Double(fps))
         Log.export.info("Starting export: \(totalFrames) frames")
-        
+
         for i in 0..<totalFrames {
-                    if writer.status == .failed { throw ExportError.writerFailed }
-                    
-                    // Wait for input to be ready
-                    while !videoInput.isReadyForMoreMediaData {
-                        try await Task.sleep(nanoseconds: 10_000_000)
-                    }
-                    
-                    let seconds = Double(i) / Double(fps)
-                    let presentationTime = CMTime(value: Int64(i), timescale: fps)
-                    
-                    // 1. Get Audio Data
-                    let fftData = await audioReader.getFrequencyData(at: seconds)
-                    
-                    // 2. allocate Pixel Buffer
-                    guard let pool = adaptor.pixelBufferPool else { throw ExportError.writerFailed }
-                    var pixelBufferOut: CVPixelBuffer?
-                    
-                    let result = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBufferOut)
-                    
-                    guard result == kCVReturnSuccess, let pixelBuffer = pixelBufferOut else {
-                        Log.export.error("Buffer allocation failed at frame \(i)")
-                        throw ExportError.fileSetupFailed
-                    }
-                    
-                    // 3. Render
-                    await renderer.render(
-                        to: pixelBuffer,
-                        time: Float(seconds),
-                        size: resolution,
-                        primary: primary,
-                        secondary: secondary,
-                        fftData: fftData
-                    )
-                    
-                    if !adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
-                        Log.export.error("Failed to append frame at \(seconds)s")
-                        throw ExportError.writerFailed
-                    }
-                    
-                    // 5. Cleanup helps prevents memory spikes
-                    pixelBufferOut = nil
-                    
-                    if i % 60 == 0 {
-                        let progress = Int(Double(i) / Double(totalFrames) * 100)
-                        Log.export.debug("Progress: \(progress)%")
-                    }
-                }
-        
+            // Check for cancellation
+            try Task.checkCancellation()
+
+            if writer.status == .failed { throw ExportError.writerFailed }
+
+            // Wait for input to be ready
+            while !videoInput.isReadyForMoreMediaData {
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+
+            let seconds = Double(i) / Double(fps)
+            let presentationTime = CMTime(value: Int64(i), timescale: fps)
+
+            // 1. Get Audio Data
+            let fftData = await audioReader.getFrequencyData(at: seconds)
+
+            // 2. allocate Pixel Buffer
+            guard let pool = adaptor.pixelBufferPool else { throw ExportError.writerFailed }
+            var pixelBufferOut: CVPixelBuffer?
+
+            let result = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pixelBufferOut)
+
+            guard result == kCVReturnSuccess, let pixelBuffer = pixelBufferOut else {
+                Log.export.error("Buffer allocation failed at frame \(i)")
+                throw ExportError.fileSetupFailed
+            }
+
+            // 3. Render
+            await renderer.render(
+                to: pixelBuffer,
+                time: Float(seconds),
+                size: resolution,
+                primary: primary,
+                secondary: secondary,
+                fftData: fftData
+            )
+
+            if !adaptor.append(pixelBuffer, withPresentationTime: presentationTime) {
+                Log.export.error("Failed to append frame at \(seconds)s")
+                throw ExportError.writerFailed
+            }
+
+            // 5. Cleanup helps prevents memory spikes
+            pixelBufferOut = nil
+
+            // Report progress
+            let progress = Double(i + 1) / Double(totalFrames)
+            onProgress(progress)
+
+            if i % 60 == 0 {
+                Log.export.debug("Progress: \(Int(progress * 100))%")
+            }
+        }
+
+        // Wait for all in-flight GPU work to complete before finalizing
+        await renderer.waitForCompletion()
+
         videoInput.markAsFinished()
         await writer.finishWriting()
         Log.export.info("Export complete")
-        
     }
 }
 
@@ -201,33 +235,42 @@ private class OfflineMetalRenderer {
     let commandQueue: MTLCommandQueue
     var pipelineState: MTLComputePipelineState?
     var textureCache: CVMetalTextureCache?
-    
+
+    // Triple buffering: allow 3 frames in-flight to keep GPU busy
+    private let inflightSemaphore = DispatchSemaphore(value: 3)
+
     init(shader: SoundbiteShader) throws {
+        Log.export.debug("[TIMING] Metal: Creating device...")
         guard let device = MTLCreateSystemDefaultDevice(),
               let commandQueue = device.makeCommandQueue() else {
             throw ProjectExportManager.ExportError.shaderInitializationFailed
         }
-        
+        Log.export.debug("[TIMING] Metal: Device created")
+
         self.device = device
         self.commandQueue = commandQueue
-        
+
         // 1. Setup Texture Cache (allows Metal to write to CVPixelBuffers)
+        Log.export.debug("[TIMING] Metal: Creating texture cache...")
         var cache: CVMetalTextureCache?
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
         self.textureCache = cache
-        
+        Log.export.debug("[TIMING] Metal: Texture cache created")
+
         // 2. Load the Library and Function
-        // Note: We construct the kernel name based on your naming convention in VoidPack.metal
-        // e.g., horizontalLinesInVoidReactive -> exportableHorizontalLinesInVoidReactive
+        Log.export.debug("[TIMING] Metal: Loading library...")
         let library = try device.makeDefaultLibrary(bundle: Bundle.main)
         let kernelName = "exportable" + shader.rawValue.prefix(1).uppercased() + shader.rawValue.dropFirst()
-        
+        Log.export.debug("[TIMING] Metal: Library loaded, finding function \(kernelName)...")
+
         guard let function = library.makeFunction(name: kernelName) else {
             Log.export.error("Could not find kernel function: \(kernelName)")
             throw ProjectExportManager.ExportError.shaderInitializationFailed
         }
-        
+        Log.export.debug("[TIMING] Metal: Function found, creating pipeline state...")
+
         self.pipelineState = try device.makeComputePipelineState(function: function)
+        Log.export.debug("[TIMING] Metal: Pipeline state created")
     }
     
     func render(
@@ -238,15 +281,22 @@ private class OfflineMetalRenderer {
         secondary: ShaderColor,
         fftData: [Float]
     ) {
+        // Wait for a slot to become available (triple buffering)
+        inflightSemaphore.wait()
+
         guard let textureCache = textureCache,
               let pipelineState = pipelineState,
               let commandBuffer = commandQueue.makeCommandBuffer(),
               let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            inflightSemaphore.signal()
             return
         }
 
         let lockResult = CVPixelBufferLockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
-        guard lockResult == kCVReturnSuccess else { return }
+        guard lockResult == kCVReturnSuccess else {
+            inflightSemaphore.signal()
+            return
+        }
 
         // 2. Create Metal Texture from CVPixelBuffer
         var cvTexture: CVMetalTexture?
@@ -266,6 +316,7 @@ private class OfflineMetalRenderer {
               let cvTexture = cvTexture,
               let texture = CVMetalTextureGetTexture(cvTexture) else {
             CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
+            inflightSemaphore.signal()
             return
         }
 
@@ -308,10 +359,29 @@ private class OfflineMetalRenderer {
         encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         encoder.endEncoding()
 
+        // Use completion handler instead of blocking wait
+        // IMPORTANT: Capture semaphore directly (not through weak self) to ensure it stays
+        // alive until all completion handlers run. Otherwise cancellation causes a crash
+        // when the semaphore is deallocated while its count < original value.
+        let semaphore = inflightSemaphore
+        commandBuffer.addCompletedHandler { [textureCache] _ in
+            CVMetalTextureCacheFlush(textureCache, 0)
+            CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
+            semaphore.signal()
+        }
         commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
-        CVMetalTextureCacheFlush(textureCache, 0)
-        CVPixelBufferUnlockBaseAddress(pixelBuffer, CVPixelBufferLockFlags(rawValue: 0))
+    }
+
+    /// Wait for all in-flight work to complete
+    func waitForCompletion() {
+        // Drain the semaphore to ensure all frames are done
+        for _ in 0..<3 {
+            inflightSemaphore.wait()
+        }
+        // Restore semaphore state
+        for _ in 0..<3 {
+            inflightSemaphore.signal()
+        }
     }
 }
 

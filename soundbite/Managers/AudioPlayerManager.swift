@@ -23,8 +23,14 @@ class AudioPlayerManager {
     }
 
     func stop() {
-        playerNode.stop()
+        // Remove tap first to stop audio processing
         audioEngine.mainMixerNode.removeTap(onBus: 0)
+
+        // Stop player node
+        playerNode.stop()
+
+        // Pause the engine to fully silence output
+        audioEngine.pause()
 
         Task { @MainActor in
             self.frequencyData = []
@@ -82,8 +88,8 @@ class AudioPlayerManager {
         }
 
         mixerNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] (buffer, time) in
-            guard let self = self else { return }
-            guard self.audioEngine.isRunning else { return }
+            guard let self else { return }
+            guard self.audioEngine.isRunning, self.playerNode.isPlaying else { return }
             guard let channelData = buffer.floatChannelData?[0] else { return }
 
             let frameLength = Int(buffer.frameLength)
@@ -95,8 +101,9 @@ class AudioPlayerManager {
                 let slice = Array(samples[start..<samples.count])
                 let magnitudes = self.audioProcessor.performAndProcessFFT(on: slice)
 
-                Task { @MainActor in
-                    self.frequencyData = magnitudes
+                // Capture self weakly again for the Task to avoid retain cycle
+                Task { @MainActor [weak self] in
+                    self?.frequencyData = magnitudes
                 }
             }
         }
