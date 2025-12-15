@@ -46,3 +46,4 @@ Future Plan: I plan to migrate the playback engine to AVPlayer combined with MTA
 - Build and Run.
 
 Built with SwiftUI, Metal, and a love for music.
+Have feedback? Shoot me an email malachifrazi@gmail.com
