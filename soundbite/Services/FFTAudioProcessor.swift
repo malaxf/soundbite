@@ -63,12 +63,12 @@ class FFTAudioProcessor {
     // Takes in input samples and returns [Float] that are the frequencies of the snapshot
     public func performFFT(on inputSamples: [Float]) -> [Float] {
         guard inputSamples.count == self.sampleSize else {
-            print("Error performing FFT: inputSample.count != self.sampleSize")
+            Log.audio.error("Error performing FFT: inputSample.count != self.sampleSize")
             return []
         }
         
         guard let dft = self.dft else {
-            print("Error with DFT initialization")
+            Log.audio.error("Error with DFT initialization")
             return []
         }
         

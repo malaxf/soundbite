@@ -9,7 +9,7 @@
 using namespace metal;
 #include "ShaderHelpers.h"
 
-// Fast atan2 approximation (~5x faster than hardware atan2)
+// Fast atan2 approximation, should be faster than standard atan
 inline float fastAtan2(float y, float x) {
     float ax = abs(x), ay = abs(y);
     float mn = min(ax, ay), mx = max(ax, ay);
@@ -22,18 +22,22 @@ inline float fastAtan2(float y, float x) {
     return r;
 }
 
-// Triangle wave approximation of asin(sin(x)) - avoids expensive trig
+// triangle wave approximation of asin(sin(x))
 inline float2 triWave(float2 x) {
     float2 p = x * M_1_PI_F + 0.5;
     return (abs(fract(p) - 0.5) * 4.0 - 1.0) * M_PI_2_F;
 }
 
-// Apply rotation given pre-computed axis
+// apply rotation helper
 inline float3 applyRotation(float3 v, float3 axis) {
     return axis * dot(axis, v) - cross(axis, v);
 }
 
-// MARK: Phosphor Fabric 
+
+
+
+
+// MARK: Phosphor Fabric
 
 half4 _phosphorFabricReactive(float2 pos, half4 color, float3 primary, float3 secondary, float time, float2 size, device const float *fft, int fftCount) {
     float2 uv = normalizeUV(pos, size);
@@ -103,6 +107,10 @@ half4 _phosphorFabricReactive(float2 pos, half4 color, float3 primary, float3 se
 
     return half4(half3(O.rgb), 1.0);
 }
+
+
+
+
 
 // MARK: Phosphor Tunnel
 

@@ -10,6 +10,7 @@ import AVFoundation
 import CoreImage
 import Metal
 import SwiftUI
+import Photos
 
 actor ProjectExportManager {
     
@@ -75,8 +76,6 @@ actor ProjectExportManager {
         writer.add(videoInput)
         Log.export.debug("[TIMING] Input added")
 
-        // Yield to allow any pending main thread work to complete before the potentially
-        // blocking writer.start() call (AVFoundation may dispatch_sync to main internally)
         await Task.yield()
 
         Log.export.debug("[TIMING] Calling writer.start()...")
@@ -101,23 +100,18 @@ actor ProjectExportManager {
         Log.export.info("Starting export: \(totalFrames) frames")
 
         for i in 0..<totalFrames {
-            // Check for cancellation
             try Task.checkCancellation()
 
             if writer.status == .failed { throw ExportError.writerFailed }
 
-            // Wait for input to be ready
             while !videoInput.isReadyForMoreMediaData {
                 try await Task.sleep(nanoseconds: 10_000_000)
             }
 
             let seconds = Double(i) / Double(fps)
             let presentationTime = CMTime(value: Int64(i), timescale: fps)
-
-            // 1. Get Audio Data
             let fftData = await audioReader.getFrequencyData(at: seconds)
 
-            // 2. allocate Pixel Buffer
             guard let pool = adaptor.pixelBufferPool else { throw ExportError.writerFailed }
             var pixelBufferOut: CVPixelBuffer?
 
@@ -128,7 +122,6 @@ actor ProjectExportManager {
                 throw ExportError.fileSetupFailed
             }
 
-            // 3. Render
             await renderer.render(
                 to: pixelBuffer,
                 time: Float(seconds),
@@ -142,11 +135,9 @@ actor ProjectExportManager {
                 Log.export.error("Failed to append frame at \(seconds)s")
                 throw ExportError.writerFailed
             }
-
-            // 5. Cleanup helps prevents memory spikes
+            
             pixelBufferOut = nil
 
-            // Report progress
             let progress = Double(i + 1) / Double(totalFrames)
             onProgress(progress)
 
@@ -155,7 +146,6 @@ actor ProjectExportManager {
             }
         }
 
-        // Wait for all in-flight GPU work to complete before finalizing
         await renderer.waitForCompletion()
 
         videoInput.markAsFinished()
@@ -173,9 +163,8 @@ private class OfflineAudioReader {
     private var monoSamples: [Float] = []
     private var sampleRate: Double = 0
 
-    // Smoothing: store previous frame's FFT data
     private var previousFFT: [Float]?
-    private let smoothingFactor: Float = 0.2 // Lower = smoother transitions
+    private let smoothingFactor: Float = 0.2
 
 
     init(audioURL: URL) throws {
@@ -214,10 +203,8 @@ private class OfflineAudioReader {
             return previousFFT ?? [Float](repeating: 0, count: 64)
         }
 
-        // Apply temporal smoothing to reduce frame-to-frame variation
         if let prev = previousFFT, prev.count == result.count {
             for i in 0..<result.count {
-                // Exponential moving average: new = factor * current + (1 - factor) * previous
                 result[i] = smoothingFactor * result[i] + (1 - smoothingFactor) * prev[i]
             }
         }
@@ -236,7 +223,6 @@ private class OfflineMetalRenderer {
     var pipelineState: MTLComputePipelineState?
     var textureCache: CVMetalTextureCache?
 
-    // Triple buffering: allow 3 frames in-flight to keep GPU busy
     private let inflightSemaphore = DispatchSemaphore(value: 3)
 
     init(shader: SoundbiteShader) throws {
@@ -250,14 +236,12 @@ private class OfflineMetalRenderer {
         self.device = device
         self.commandQueue = commandQueue
 
-        // 1. Setup Texture Cache (allows Metal to write to CVPixelBuffers)
         Log.export.debug("[TIMING] Metal: Creating texture cache...")
         var cache: CVMetalTextureCache?
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
         self.textureCache = cache
         Log.export.debug("[TIMING] Metal: Texture cache created")
 
-        // 2. Load the Library and Function
         Log.export.debug("[TIMING] Metal: Loading library...")
         let library = try device.makeDefaultLibrary(bundle: Bundle.main)
         let kernelName = "exportable" + shader.rawValue.prefix(1).uppercased() + shader.rawValue.dropFirst()
@@ -281,7 +265,6 @@ private class OfflineMetalRenderer {
         secondary: ShaderColor,
         fftData: [Float]
     ) {
-        // Wait for a slot to become available (triple buffering)
         inflightSemaphore.wait()
 
         guard let textureCache = textureCache,
@@ -298,14 +281,13 @@ private class OfflineMetalRenderer {
             return
         }
 
-        // 2. Create Metal Texture from CVPixelBuffer
         var cvTexture: CVMetalTexture?
         let textureStatus = CVMetalTextureCacheCreateTextureFromImage(
             kCFAllocatorDefault,
             textureCache,
             pixelBuffer,
             nil,
-            .bgra8Unorm, // Must match the writer settings in ProjectExportManager
+            .bgra8Unorm, // match the writer settings in ProjectExportManager
             Int(size.width),
             Int(size.height),
             0,
@@ -320,25 +302,19 @@ private class OfflineMetalRenderer {
             return
         }
 
-        // 3. Prepare Data
-        // Convert ShaderColor (Double) to SIMD3<Float> for Metal
         var prim = SIMD3<Float>(Float(primary.r), Float(primary.g), Float(primary.b))
         var sec = SIMD3<Float>(Float(secondary.r), Float(secondary.g), Float(secondary.b))
         var timeVal = time
         var sizeVal = SIMD2<Float>(Float(size.width), Float(size.height))
 
-        // Encode Commands
         encoder.setComputePipelineState(pipelineState)
         encoder.setTexture(texture, index: 0)
-
-        // Buffer indices match VoidPack.metal signatures:
-        // 0: primary, 1: secondary, 2: time, 3: size, 4: fft, 5: fftCount
+        
         encoder.setBytes(&prim, length: MemoryLayout<SIMD3<Float>>.stride, index: 0)
         encoder.setBytes(&sec, length: MemoryLayout<SIMD3<Float>>.stride, index: 1)
         encoder.setBytes(&timeVal, length: MemoryLayout<Float>.stride, index: 2)
         encoder.setBytes(&sizeVal, length: MemoryLayout<SIMD2<Float>>.stride, index: 3)
 
-        // Pass FFT array - ensure we always pass valid data
         let safeFFTData: [Float] = fftData.isEmpty ? [Float](repeating: 0, count: 64) : fftData
         var safeFftCount = Int32(safeFFTData.count)
 
@@ -350,7 +326,6 @@ private class OfflineMetalRenderer {
 
         encoder.setBytes(&safeFftCount, length: MemoryLayout<Int32>.stride, index: 5)
 
-        // 5. Dispatch Threads
         let w = pipelineState.threadExecutionWidth
         let h = pipelineState.maxTotalThreadsPerThreadgroup / w
         let threadsPerThreadgroup = MTLSizeMake(w, h, 1)
@@ -359,10 +334,6 @@ private class OfflineMetalRenderer {
         encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
         encoder.endEncoding()
 
-        // Use completion handler instead of blocking wait
-        // IMPORTANT: Capture semaphore directly (not through weak self) to ensure it stays
-        // alive until all completion handlers run. Otherwise cancellation causes a crash
-        // when the semaphore is deallocated while its count < original value.
         let semaphore = inflightSemaphore
         commandBuffer.addCompletedHandler { [textureCache] _ in
             CVMetalTextureCacheFlush(textureCache, 0)
@@ -372,23 +343,17 @@ private class OfflineMetalRenderer {
         commandBuffer.commit()
     }
 
-    /// Wait for all in-flight work to complete
     func waitForCompletion() {
-        // Drain the semaphore to ensure all frames are done
         for _ in 0..<3 {
             inflightSemaphore.wait()
         }
-        // Restore semaphore state
+        
         for _ in 0..<3 {
             inflightSemaphore.signal()
         }
     }
 }
 
-
-
-
-import Photos
 
 extension ProjectExportManager {
     
@@ -398,7 +363,6 @@ extension ProjectExportManager {
         
         let composition = AVMutableComposition()
         
-        // 1. Load Tracks
         guard let videoTrack = try await videoAsset.loadTracks(withMediaType: .video).first,
               let audioTrack = try await audioAsset.loadTracks(withMediaType: .audio).first,
               let compositionVideo = composition.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid),
@@ -407,29 +371,21 @@ extension ProjectExportManager {
             throw ExportError.fileSetupFailed
         }
         
-        // 2. Define Time Ranges
-        // We use the VIDEO duration as the master length.
         let videoDuration = try await videoAsset.load(.duration)
         let videoRange = CMTimeRange(start: .zero, duration: videoDuration)
         
-        // Insert Video
         try compositionVideo.insertTimeRange(videoRange, of: videoTrack, at: .zero)
         
-        // 3. Insert Audio (Clamped)
-        // Ensure we don't try to insert more audio than exists, or longer than the video.
         let audioDuration = try await audioAsset.load(.duration)
         let validAudioDuration = min(videoDuration, audioDuration)
         let audioRange = CMTimeRange(start: .zero, duration: validAudioDuration)
         
         try compositionAudio.insertTimeRange(audioRange, of: audioTrack, at: .zero)
         
-        // 4. Export (iOS 18+ API)
         guard let exportSession = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
             throw ExportError.writerFailed
         }
         
-        // Use the modern async export method (Available iOS 18.0+)
-        // This throws automatically on failure, so no need to check .status
         try await exportSession.export(to: outputURL, as: .mp4)
     }
     

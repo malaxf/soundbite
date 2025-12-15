@@ -55,7 +55,7 @@ nonisolated enum SoundbiteShader: String, Codable, CaseIterable, Sendable {
     case circlesInVoidReactive
     case diamondsInVoidReactive
 
-    // Void pack non-reactive
+    // Void pack non-reactive // TODO: Remove non-reactive shaders
     case diamondsInVoid
     case circlesInVoid
 

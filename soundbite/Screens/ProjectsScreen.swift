@@ -11,7 +11,7 @@ import SwiftData
 struct ProjectsScreen: View {
     @Environment(\.modelContext) var context
     @Query private var projects: [Project]
-    @State private var viewModel = ProjectsViewModel()
+    @State private var viewModel = ProjectsScreenViewModel()
     @State private var navigationManager = NavigationManager()
 
     var body: some View {

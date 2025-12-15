@@ -1,5 +1,5 @@
 //
-//  ProjectsViewModel.swift
+//  ProjectsScreenViewModel.swift
 //  soundbite
 //
 //  Created by Malachi Frazier on 12/13/25.
@@ -11,7 +11,7 @@ import SwiftData
 import Observation
 
 @MainActor @Observable
-final class ProjectsViewModel {
+final class ProjectsScreenViewModel {
     var showNewProjectSheet = false
     var showNameProjectSheet = false
     var errorMessage: String?

@@ -11,40 +11,29 @@ struct ExportOverlayView: View {
     let progress: Double
     let phase: ExportPhase
     let onCancel: () -> Void
-
+    
     private let spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     @State private var spinnerIndex = 0
-
+    
     var body: some View {
         ZStack {
             Color.background
                 .ignoresSafeArea()
-
+            
             VStack(alignment: .leading, spacing: 120) {
-
                 Spacer()
                 Spacer()
-
-                    HStack(spacing: 8) {
-
-                        Text(spinnerFrames[spinnerIndex])
-                            .foregroundStyle(Color.foreground)
+                
+                HStack(spacing: 8) {
+                    spinner
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(phase.description)
                             .font(.title)
-                            .monospaced()
-                            .onAppear {
-                                Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
-                                    spinnerIndex = (spinnerIndex + 1) % spinnerFrames.count
-                                }
-                            }
-                        
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(phase.description)
-                                .font(.title)
-                                .foregroundStyle(Color.foreground)
-                        }
+                            .foregroundStyle(Color.foreground)
                     }
-
+                }
+                
                 VStack(spacing: 16) {
                     ProgressView(value: progress)
                         .progressViewStyle(.linear)
@@ -60,25 +49,41 @@ struct ExportOverlayView: View {
                 }
                 
                 Spacer()
-
-                HStack {
-                    Spacer()
-                    Button(role: .destructive) {
-                        onCancel()
-                    } label: {
-                        Text("Cancel")
-                            .font(.body)
-                            .frame(height: 60)
-                            .padding(.horizontal, 16)
-                            .foregroundStyle(Color.foreground)
-                        
-                    }
-                    Spacer()
-                }
-                .padding(.bottom, 40)
+                
+                cancelButton
             }
             .padding(.horizontal, 32)
         }
+    }
+    
+    private var spinner: some View {
+        Text(spinnerFrames[spinnerIndex])
+            .foregroundStyle(Color.foreground)
+            .font(.title)
+            .monospaced()
+            .onAppear {
+                Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in
+                    spinnerIndex = (spinnerIndex + 1) % spinnerFrames.count
+                }
+            }
+    }
+    
+    private var cancelButton: some View {
+        HStack {
+            Spacer()
+            Button(role: .destructive) {
+                onCancel()
+            } label: {
+                Text("Cancel")
+                    .font(.body)
+                    .frame(height: 60)
+                    .padding(.horizontal, 16)
+                    .foregroundStyle(Color.foreground)
+                
+            }
+            Spacer()
+        }
+        .padding(.bottom, 40)
     }
 }
 

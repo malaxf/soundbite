@@ -12,7 +12,7 @@ import SwiftData
 final class AudioRecording {
     var id: UUID
     var title: String
-    var dateCreated: Date
+    var dateCreated: Date // TODO: change property name to createdAt to match Project
     var filename: String
     
     init(id: UUID = UUID(), title: String, dateCreated: Date, filename: String) {

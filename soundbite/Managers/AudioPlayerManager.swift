@@ -23,13 +23,8 @@ class AudioPlayerManager {
     }
 
     func stop() {
-        // Remove tap first to stop audio processing
         audioEngine.mainMixerNode.removeTap(onBus: 0)
-
-        // Stop player node
         playerNode.stop()
-
-        // Pause the engine to fully silence output
         audioEngine.pause()
 
         Task { @MainActor in
@@ -101,7 +96,6 @@ class AudioPlayerManager {
                 let slice = Array(samples[start..<samples.count])
                 let magnitudes = self.audioProcessor.performAndProcessFFT(on: slice)
 
-                // Capture self weakly again for the Task to avoid retain cycle
                 Task { @MainActor [weak self] in
                     self?.frequencyData = magnitudes
                 }
